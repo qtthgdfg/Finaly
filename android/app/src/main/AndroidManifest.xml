@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Network permissions for mining pool connection -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
+    <!-- Foreground service permission for background mining -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    
+    <!-- Keep device awake while mining -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <!-- Notifications for Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Allow cleartext traffic for TCP mining connections -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Monero Miner"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:usesCleartextTraffic="true">
+
+        <!--
+            Main Activity
+            This is the entry point when the user opens the app.
+            It hosts a WebView that loads the HTML/CSS/JS mining interface.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden"
+            android:launchMode="singleTop"
+            android:hardwareAccelerated="true">
+            
+            <!-- This intent filter makes this the launcher activity -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            
+        </activity>
+
+        <!--
+            Mining Service
+            Runs the miner in the background even when the app is closed.
+            Shows a persistent notification while mining is active.
+        -->
+        <service
+            android:name=".MinerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:process=":miner">
+            
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="cryptocurrency_mining" />
+                
+        </service>
+
+    </application>
+</manifest>
