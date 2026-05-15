@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Monero Miner</string>
+    <string name="start_mining">Start Mining</string>
+    <string name="stop_mining">Stop Mining</string>
+    <string name="status_mining">Mining Active</string>
+    <string name="status_stopped">Miner Stopped</string>
+    <string name="status_paused">Miner Paused</string>
+    <string name="status_error">Error</string>
+</resources>
