@@ -1,0 +1,233 @@
+# FILE: .github/workflows/android.yml
+name: Android Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+  ANDROID_NDK_VERSION: '26.1.10909125'
+  RANDOMX_VERSION: 'v1.1.10'
+  GRADLE_VERSION: '8.5'
+
+jobs:
+  # ============================================================
+  # STEP 1: Prepare dependencies
+  # ============================================================
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Cache dependencies
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            libs/randomx/
+            libs/nlohmann/
+          key: deps-v5-${{ env.RANDOMX_VERSION }}-${{ hashFiles('CMakeLists.txt') }}
+      
+      - name: Clone RandomX
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "📦 Cloning RandomX..."
+          mkdir -p libs
+          git clone --depth 1 --branch ${{ env.RANDOMX_VERSION }} \
+            https://github.com/tevador/RandomX.git libs/randomx
+          test -f "libs/randomx/src/randomx.h" || { echo "❌ RandomX clone failed"; exit 1; }
+          echo "✅ RandomX cloned"
+      
+      - name: Download JSON library
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "📦 Downloading JSON library..."
+          mkdir -p libs/nlohmann
+          wget -q -O libs/nlohmann/json.hpp \
+            https://github.com/nlohmann/json/releases/latest/download/json.hpp || \
+          curl -fsSL -o libs/nlohmann/json.hpp \
+            https://github.com/nlohmann/json/releases/latest/download/json.hpp
+          test -f "libs/nlohmann/json.hpp" || { echo "❌ JSON download failed"; exit 1; }
+          echo "✅ JSON downloaded"
+      
+      - name: Upload dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps
+          path: |
+            libs/randomx/
+            libs/nlohmann/
+          retention-days: 1
+
+  # ============================================================
+  # STEP 2: Build APK (single job, all ABIs)
+  # ============================================================
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: deps
+          path: libs/
+      
+      - name: Fix dependency paths
+        run: |
+          echo "Fixing dependency paths..."
+          
+          # Fix nested structures
+          [ -d "libs/randomx/randomx" ] && cp -r libs/randomx/randomx/* libs/randomx/ && rm -rf libs/randomx/randomx
+          [ -f "libs/json.hpp" ] && mkdir -p libs/nlohmann && mv libs/json.hpp libs/nlohmann/
+          [ -d "randomx" ] && mv randomx libs/
+          [ -d "nlohmann" ] && mv nlohmann libs/
+          
+          # Verify
+          test -f "libs/randomx/src/randomx.h" || { echo "❌ RandomX missing"; find . -name "randomx.h"; exit 1; }
+          test -f "libs/nlohmann/json.hpp" || { echo "❌ JSON missing"; find . -name "json.hpp"; exit 1; }
+          echo "✅ Dependencies verified"
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install NDK
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install \
+            "ndk;${{ env.ANDROID_NDK_VERSION }}" \
+            "cmake;3.22.1" 2>/dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+      
+      - name: Setup Gradle wrapper
+        working-directory: android
+        run: |
+          mkdir -p gradle/wrapper
+          
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            wget -q -O gradle/wrapper/gradle-wrapper.jar \
+              "https://raw.githubusercontent.com/gradle/gradle/v${{ env.GRADLE_VERSION }}.0/gradle/wrapper/gradle-wrapper.jar"
+          fi
+          
+          {
+            echo "distributionBase=GRADLE_USER_HOME"
+            echo "distributionPath=wrapper/dists"
+            echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-${{ env.GRADLE_VERSION }}-bin.zip"
+            echo "networkTimeout=10000"
+            echo "validateDistributionUrl=true"
+            echo "zipStoreBase=GRADLE_USER_HOME"
+            echo "zipStorePath=wrapper/dists"
+          } > gradle/wrapper/gradle-wrapper.properties
+          
+          chmod +x gradlew
+          echo "✅ Gradle wrapper ready"
+      
+      - name: Verify structure
+        run: |
+          FILES=(
+            "libs/randomx/src/randomx.h"
+            "libs/nlohmann/json.hpp"
+            "android/build.gradle"
+            "android/app/build.gradle"
+            "android/app/src/main/AndroidManifest.xml"
+            "android/app/src/main/cpp/CMakeLists.txt"
+            "android/app/src/main/cpp/android_main.cpp"
+            "android/app/src/main/cpp/miner_bridge.cpp"
+            "src/randomx_miner.cpp"
+            "src/stratum_client.cpp"
+            "src/job_handler.cpp"
+            "libs/randomx_wrapper.cpp"
+          )
+          for file in "${FILES[@]}"; do
+            [ -f "$file" ] && echo "  ✅ $file" || { echo "  ❌ MISSING: $file"; exit 1; }
+          done
+          echo "✅ All files present"
+      
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ env.GRADLE_VERSION }}
+      
+      - name: Build APK (all ABIs)
+        id: build
+        working-directory: android
+        run: |
+          echo "========================================="
+          echo "BUILD: arm64-v8a + armeabi-v7a + x86_64"
+          echo "Time: $(date)"
+          echo "========================================="
+          
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../build.log
+          RESULT=${PIPESTATUS[0]}
+          
+          echo ""
+          if [ $RESULT -eq 0 ]; then
+            echo "✅ BUILD SUCCESSFUL"
+            find . -name "*.apk" | head -10
+          else
+            echo "❌ BUILD FAILED (exit: $RESULT)"
+            echo ""
+            echo "Last 50 lines:"
+            tail -50 ../build.log
+            exit 1
+          fi
+      
+      - name: Upload APK (debug)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoneroMiner-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+      
+      - name: Upload build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
+
+  # ============================================================
+  # STEP 3: Release (on version tags only)
+  # ============================================================
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: MoneroMiner-debug-apk
+      
+      - name: Download build log
+        uses: actions/download-artifact@v4
+        with:
+          name: build-log
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            *.apk
+            build.log
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
