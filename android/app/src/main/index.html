@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Monero RandomX Miner</title>
+<style>
+:root {
+    --bg: #0a0a1a;
+    --card: #12122a;
+    --input: #1a1a3a;
+    --green: #00e676;
+    --red: #ff1744;
+    --gold: #ffd740;
+    --text: #e0e0e0;
+    --muted: #8899aa;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    min-height: 100vh;
+    max-width: 500px;
+    margin: 0 auto;
+}
+.header{
+    text-align: center;
+    padding: 24px 0 16px;
+}
+.header h1{
+    font-size: 24px;
+    color: var(--gold);
+    letter-spacing: 1px;
+}
+.header .version{
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+}
+.status-card{
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 16px;
+    border: 2px solid #1a1a3a;
+}
+.status-label{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+.status-value{
+    font-size: 36px;
+    font-weight: 700;
+    transition: color 0.3s;
+}
+.status-ready{color: var(--muted)}
+.status-mining{color: var(--green)}
+.status-error{color: var(--red)}
+.hashrate-display{
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--muted);
+}
+.hashrate-display span{
+    color: var(--gold);
+    font-weight: 600;
+}
+.stats-row{
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+.stat-item{
+    flex: 1;
+    background: #0a0a2a;
+    border-radius: 8px;
+    padding: 8px;
+}
+.stat-item .stat-val{
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gold);
+}
+.stat-item .stat-lbl{
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+.config-card{
+    background: var(--card);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.config-card label{
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 6px;
+}
+.config-card input, .config-card select{
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--input);
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+    transition: border 0.2s;
+    margin-bottom: 12px;
+}
+.config-card input:focus{
+    border-color: var(--gold);
+}
+.config-row{
+    display: flex;
+    gap: 8px;
+}
+.config-row > div{flex: 1}
+.btn{
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: opacity 0.2s;
+}
+.btn:active{opacity: 0.8}
+.btn-start{background: linear-gradient(135deg, #00c853, #00e676); color: #000}
+.btn-stop{background: linear-gradient(135deg, #d50000, #ff1744); color: #fff}
+.btn-stop:disabled{opacity: 0.4}
+.log-container{
+    background: var(--card);
+    border-radius: 16px;
+    padding: 12px;
+    height: 200px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-all;
+    border: 1px solid #1a1a3a;
+}
+.log-line{line-height: 1.6}
+.log-time{color: #556}
+.log-info{color: #88a}
+.log-warn{color: var(--gold)}
+.log-error{color: var(--red)}
+.log-share{color: var(--green)}
+.footer{
+    text-align: center;
+    padding: 16px;
+    font-size: 10px;
+    color: #334;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>⛏️ Monero Miner</h1>
+    <div class="version">RandomX Engine v1.0 | TCP Stratum</div>
+</div>
+
+<div class="status-card">
+    <div class="status-label">Status</div>
+    <div class="status-value status-ready" id="statusText">READY</div>
+    <div class="hashrate-display">Hashrate: <span id="hashrateVal">0</span> H/s</div>
+    <div class="stats-row">
+        <div class="stat-item">
+            <div class="stat-val" id="sharesAcc">0</div>
+            <div class="stat-lbl">Accepted</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val" id="sharesRej">0</div>
+            <div class="stat-lbl">Rejected</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val" id="uptimeVal">0m</div>
+            <div class="stat-lbl">Uptime</div>
+        </div>
+    </div>
+</div>
+
+<div class="config-card">
+    <label>Pool Host</label>
+    <input type="text" id="poolHost" value="pool.supportxmr.com" placeholder="pool.supportxmr.com">
+    
+    <div class="config-row">
+        <div>
+            <label>Port</label>
+            <input type="number" id="poolPort" value="3333">
+        </div>
+        <div>
+            <label>Threads</label>
+            <input type="number" id="threads" value="2" min="1" max="8">
+        </div>
+    </div>
+    
+    <label>Wallet Address</label>
+    <input type="text" id="wallet" placeholder="4...">
+    
+    <label>Worker Name</label>
+    <input type="text" id="worker" value="android_miner">
+</div>
+
+<button class="btn btn-start" id="btnStart" onclick="startMining()">▶ Start Mining</button>
+<button class="btn btn-stop" id="btnStop" onclick="stopMining()" disabled>⏹ Stop Mining</button>
+
+<div class="log-container" id="logContainer"></div>
+
+<div class="footer">Monero RandomX Miner &copy; 2026 | Powered by RandomX</div>
+
+<script src="miner.js"></script>
+</body>
+</html>
